@@ -1,27 +1,63 @@
-import { GoogleSpreadsheet } from "google-spreadsheet";
+import {GoogleSpreadsheet} from "google-spreadsheet";
+import commander from "commander";
 import dotenv from "dotenv";
 
 import {getCurrentDateTime, formatRows} from "./utils";
 
 dotenv.config();
 
+type BPCommandContext =
+    | {
+          cmd: "add";
+          args: {
+              Systolic: number;
+              Diastolic: number;
+              HR: number;
+              Notes: string;
+          };
+      }
+    | {cmd: "print"; args: {}}
+    | {cmd: "delete_last"; args: {}}
+    | {cmd: "get_link"; args: {}};
+
 async function main() {
-    const { argv } = process;
-    const args = argv.slice(2);
+    const {argv} = process;
 
-    if (args.length > 3 || args.length == 2) {
-        throw new Error(
-            `
-            Required usage: 
-                ${argv[0]} ${argv[1]}
-                ${argv[0]} ${argv[1]} delete_last
-                ${argv[0]} ${argv[1]} get_link
-                ${argv[0]} ${argv[1]} <Systolic> <Diastolic> <HR>
+    let preCtx: BPCommandContext = {cmd: "print", args: {}};
 
-            (If no args are given, will print recent data and exit.)
-            `
-        );
-    }
+    const program = new commander.Command();
+    program
+        .command("add <Systolic> <Diastolic> <HR> [Notes...]")
+        .description("Add a row to the Google Sheet")
+        .action((Systolic, Diastolic, HR, Notes) => {
+            const concatenatedNotes = Notes.join(" ");
+            preCtx = {
+                cmd: "add",
+                args: {Systolic, Diastolic, HR, Notes: concatenatedNotes},
+            };
+        });
+    program
+        .command("print")
+        .description("Print out the contents of the Google Sheet")
+        .action(() => {
+            preCtx = {cmd: "print", args: {}};
+        });
+    program
+        .command("delete_last")
+        .description("Delete the last row from the Google Sheet")
+        .action(() => {
+            preCtx = {cmd: "delete_last", args: {}};
+        });
+    program
+        .command("get_link")
+        .description("Get the link to the Google Sheet")
+        .action(() => {
+            preCtx = {cmd: "get_link", args: {}};
+        });
+
+    program.parse(argv);
+
+    const ctx = preCtx as BPCommandContext;
 
     const [GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY] =
         [
@@ -40,11 +76,12 @@ async function main() {
         );
     }
 
-    if (args.length === 1) {
-        if (args[0] === "get_link") {
-            console.log("https://docs.google.com/spreadsheets/d/" + process.env.GOOGLE_SHEET_ID);
-            return;
-        }
+    if (ctx.cmd === "get_link") {
+        console.log(
+            "https://docs.google.com/spreadsheets/d/" +
+                process.env.GOOGLE_SHEET_ID
+        );
+        return;
     }
 
     const doc = new GoogleSpreadsheet(GOOGLE_SHEET_ID);
@@ -58,41 +95,38 @@ async function main() {
     const sheet = doc.sheetsByIndex[0];
     const rows = await sheet.getRows();
 
-    const [Systolic, Diastolic, HR] = args;
+    //const [Systolic, Diastolic, HR] = args;
 
-    if (args.length === 0) {
+    if (ctx.cmd === "print") {
         const output = formatRows(rows);
         console.log(output);
         return;
     }
 
-
-    if (args.length === 1) {
-        if (args[0] === "delete_last") {
-            if (rows.length === 0) {
-                console.log("No rows to delete!");
-                return;
-            }
-            const delRow = rows[rows.length - 1];
-            const delRowText = formatRows([delRow]);
-            delRow.delete();
-
-            const output = formatRows(rows.slice(0, rows.length - 1));
-            console.log(output);
-            process.stderr.write(`Deleted last row:\n${delRowText}\n`);
+    if (ctx.cmd === "delete_last") {
+        if (rows.length === 0) {
+            console.log("No rows to delete!");
             return;
         }
+        const delRow = rows[rows.length - 1];
+        const delRowText = formatRows([delRow]);
+        delRow.delete();
 
-        console.log("Unknown command: " + args[0]);
-        process.exit(1);
+        const output = formatRows(rows.slice(0, rows.length - 1));
+        console.log(output);
+        process.stderr.write(`Deleted last row:\n${delRowText}\n`);
+        return;
     }
 
-    if (args.length === 3) {
+    if (ctx.cmd === "add") {
+        const {Systolic, Diastolic, HR, Notes} = ctx.args;
+
         const res = await sheet.addRow({
             Date: getCurrentDateTime(),
             Systolic,
             Diastolic,
             HR,
+            Notes,
         });
 
         if ("_rawData" in res) {
@@ -102,7 +136,14 @@ async function main() {
             console.log(res);
             console.log("Unknown response from Google Sheets!");
         }
+        return;
     }
+
+    console.log(
+        "Unknown command! This is an error, the script should not have reached this point. Context: ",
+        ctx
+    );
+    process.exit(1);
 }
 
 if (require.main === module) {
