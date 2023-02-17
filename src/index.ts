@@ -2,7 +2,7 @@ import {GoogleSpreadsheet} from "google-spreadsheet";
 import commander from "commander";
 import dotenv from "dotenv";
 
-import {getCurrentDateTime, formatRows} from "./utils";
+import {getFormattedDateTime, formatRows} from "./utils";
 
 dotenv.config();
 
@@ -95,8 +95,6 @@ async function main() {
     const sheet = doc.sheetsByIndex[0];
     const rows = await sheet.getRows();
 
-    //const [Systolic, Diastolic, HR] = args;
-
     if (ctx.cmd === "print") {
         const output = formatRows(rows);
         console.log(output);
@@ -114,7 +112,7 @@ async function main() {
 
         const output = formatRows(rows.slice(0, rows.length - 1));
         console.log(output);
-        process.stderr.write(`Deleted last row:\n${delRowText}\n`);
+        process.stderr.write(`[!!!] Deleted last row:\n${delRowText}\n`);
         return;
     }
 
@@ -122,7 +120,7 @@ async function main() {
         const {Systolic, Diastolic, HR, Notes} = ctx.args;
 
         const res = await sheet.addRow({
-            Date: getCurrentDateTime(),
+            Date: getFormattedDateTime(new Date()),
             Systolic,
             Diastolic,
             HR,
