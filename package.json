@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "@types/node": "^24.8.1",
-    "commander": "^14.0.1",
+    "@types/node": "^24.9.1",
+    "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "google-spreadsheet": "^5.0.2",
     "ts-node": "^10.9.1",
